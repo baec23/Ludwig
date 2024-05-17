@@ -5,35 +5,39 @@ import android.graphics.RuntimeShader
 import android.graphics.Shader
 import android.os.Build
 import androidx.annotation.RequiresApi
+import androidx.compose.animation.core.EaseInOutExpo
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asComposeRenderEffect
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.baec23.ludwig.morpher.component.VectorImage
+import com.baec23.ludwig.R
+import com.baec23.ludwig.morpher.component.AnimatedFillVector
 import com.baec23.ludwig.morpher.model.morpher.VectorSource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -55,15 +59,16 @@ private const val SHADER_SRC = """
         } else if (x < 1.0) {
             gray = (103806720.0 / 483977.0 * x + 2607415.0 / 483977.0) / 255.0;
         } else {
-            gray = 1.0;
+            gray = 0.8;
         }
         
-        return gray;
+        return min(gray, 0.8);
     }
 
 
     float4 colormap(float x) {
-        return float4(colormap_grayscale(x), colormap_grayscale(x), colormap_grayscale(x), 1.0);
+        float color = colormap_grayscale(x);
+        return float4(color, color, color, 1.0);
     }
 
 
@@ -105,10 +110,13 @@ private const val SHADER_SRC = """
 
     half4 main(float2 fragCoord)
     {
-        float2 uv = fragCoord/size.x;
+        float2 uv = fragCoord/size.y;
         float shade = pattern(uv);
         if(composable.eval(fragCoord).a == 0){
             shade = 0.0;
+        }
+        else{
+            shade = min(shade, 0.8);
         }
         return half4(colormap(shade).rgb, shade);
     }
@@ -230,38 +238,39 @@ private const val SHADER_SRC = """
 @Composable
 fun ShaderTestScreen() {
     val shader = RuntimeShader(SHADER_SRC)
+    val appleVectorSource =
+        VectorSource.fromImageVector(ImageVector.vectorResource(R.drawable.applelogo))
+    val firefoxVectorSource =
+        VectorSource.fromImageVector(ImageVector.vectorResource(R.drawable.flower))
+    var currSelectedSource by remember { mutableStateOf(appleVectorSource) }
 
     val coroutineScope = rememberCoroutineScope()
     var timeMs by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(Unit) {
         coroutineScope.launch {
             while (true) {
-                timeMs = (System.currentTimeMillis() % 20000L) / 1000f
-                delay(20)
+                timeMs = (System.currentTimeMillis() % 1000000L) / 1000f
+                delay(10)
             }
         }
     }
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.Transparent)
+            .background(Color.White)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .wrapContentHeight()
+                .background(color = Color.DarkGray)
                 .padding(4.dp),
             contentAlignment = Alignment.Center
         ) {
-            VectorImage(
+            AnimatedFillVector(
                 modifier = Modifier
-                    .padding(50.dp),
-                source = VectorSource.fromImageVector(Icons.Default.Star),
-                style = Stroke(width = 160f),
-                color = Color.Black
-            )
-            VectorImage(
-                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
                     .onSizeChanged { size ->
                         shader.setFloatUniform(
                             "size",
@@ -269,7 +278,13 @@ fun ShaderTestScreen() {
                             size.height.toFloat()
                         )
                     }
-                    .alpha(0.5f)
+                    .clickable {
+                        currSelectedSource = if (currSelectedSource == appleVectorSource) {
+                            firefoxVectorSource
+                        } else {
+                            appleVectorSource
+                        }
+                    }
                     .graphicsLayer {
                         shader.setFloatUniform("time", timeMs)
                         clip = true
@@ -277,8 +292,8 @@ fun ShaderTestScreen() {
                             RenderEffect
                                 .createChainEffect(
                                     RenderEffect.createBlurEffect(
-                                        10.0f,
-                                        10.0f,
+                                        5.0f,
+                                        5.0f,
                                         Shader.TileMode.CLAMP
                                     ),
                                     RenderEffect
@@ -287,16 +302,79 @@ fun ShaderTestScreen() {
                                 .asComposeRenderEffect()
                     }
                     .padding(50.dp),
-                source = VectorSource.fromImageVector(Icons.Default.Star),
-                style = Stroke(width = 160f),
-                color = Color.Black
+                vectorSource = currSelectedSource,
+                fillColor = Color.Black,
+                animationSpec = tween(durationMillis = 800, easing = EaseInOutExpo)
             )
-            Text(
-                text = "Hello World",
-                fontSize = 60.sp,
-                fontWeight = FontWeight.Black,
-                textAlign = TextAlign.Center
-            )
+//            VectorImage(
+//                modifier = Modifier
+//                    .padding(50.dp),
+//                source = VectorSource.fromImageVector(Icons.Default.Star),
+//                style = Stroke(width = 160f),
+//                color = Color.Black
+//            )
+//            VectorImage(
+//                modifier = Modifier
+//                    .onSizeChanged { size ->
+//                        shader.setFloatUniform(
+//                            "size",
+//                            size.width.toFloat(),
+//                            size.height.toFloat()
+//                        )
+//                    }
+//                    .alpha(1f)
+//                    .graphicsLayer {
+//                        shader.setFloatUniform("time", timeMs)
+//                        clip = true
+//                        renderEffect =
+//                            RenderEffect
+//                                .createChainEffect(
+//                                    RenderEffect.createBlurEffect(
+//                                        10.0f,
+//                                        10.0f,
+//                                        Shader.TileMode.CLAMP
+//                                    ),
+//                                    RenderEffect
+//                                        .createRuntimeShaderEffect(shader, "composable"),
+//                                )
+//                                .asComposeRenderEffect()
+//                    }
+//                    .padding(50.dp),
+//                source = VectorSource.fromImageVector(Icons.Default.Star),
+//                style = Stroke(width = 160f),
+//                color = Color.Black
+//            )
+//            VectorImage(
+//                modifier = Modifier
+//                    .onSizeChanged { size ->
+//                        shader.setFloatUniform(
+//                            "size",
+//                            size.width.toFloat(),
+//                            size.height.toFloat()
+//                        )
+//                    }
+//                    .alpha(0.6f)
+//                    .graphicsLayer {
+//                        shader.setFloatUniform("time", timeMs * 0.015123f)
+//                        clip = true
+//                        renderEffect =
+//                            RenderEffect
+//                                .createChainEffect(
+//                                    RenderEffect.createBlurEffect(
+//                                        50.0f,
+//                                        50.0f,
+//                                        Shader.TileMode.CLAMP
+//                                    ),
+//                                    RenderEffect
+//                                        .createRuntimeShaderEffect(shader, "composable"),
+//                                )
+//                                .asComposeRenderEffect()
+//                    }
+//                    .padding(50.dp),
+//                source = VectorSource.fromImageVector(Icons.Default.Star),
+//                style = Stroke(width = 160f),
+//                color = Color.Black
+//            )
         }
     }
 }
