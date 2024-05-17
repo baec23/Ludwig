@@ -33,9 +33,9 @@ fun AnimatedTextTestScreen() {
         DisplaySection(
             headerText = "Animated Text Test"
         ) {
-            com.baec23.ludwig.morpher.component.text.AnimatedText(
+            AnimatedText(
                 modifier = Modifier
-                    .wrapContentSize()
+//                    .wrapContentSize()
                     .border(width = 2.dp, color = Color.Red),
                 text = animatedText
             )
