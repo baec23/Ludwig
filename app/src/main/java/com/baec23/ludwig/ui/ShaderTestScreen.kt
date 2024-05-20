@@ -1,20 +1,20 @@
 package com.baec23.ludwig.ui
 
+import android.animation.ValueAnimator
 import android.graphics.RenderEffect
 import android.graphics.RuntimeShader
 import android.graphics.Shader
 import android.os.Build
+import android.view.animation.AnticipateOvershootInterpolator
 import androidx.annotation.RequiresApi
-import androidx.compose.animation.core.EaseInOutExpo
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -26,99 +26,170 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.baec23.ludwig.R
-import com.baec23.ludwig.morpher.component.AnimatedFillVector
 import com.baec23.ludwig.morpher.model.morpher.VectorSource
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
+//private const val SHADER_SRC = """
+//    uniform shader composable;
+//    uniform float time;
+//    uniform float elapsedTime;
+//    uniform float2 size;
+//
+//    half4 main(in float2 fragCoord) {
+//      float scaled = (1.0-time/5000.0);
+////      return half4(0.5, 0.5, 0.5, 1.0);
+//      return half4(scaled,scaled, 0, 1.0);
+//   }
+//"""
+
+//private const val SHADER_SRC = """
+//    uniform shader composable;
+//    uniform float time;
+//    uniform float2 size;
+//
+//    float colormap_grayscale(float x) {
+//        float gray;
+//
+//        if (x < 0.0) {
+//            gray = 104.0 / 255.0;
+//        } else if (x < 20049.0 / 82979.0) {
+//            gray = (829.79 * x + 1.51) / 255.0;
+//        } else if (x < 327013.0 / 810990.0) {
+//            gray = (82679670.0 / 10875673217.0 * x - 2190770.0 / 10875673217.0) / 255.0;
+//        } else if (x < 1.0) {
+//            gray = (103806720.0 / 483977.0 * x + 2607415.0 / 483977.0) / 255.0;
+//        } else {
+//            gray = 0.8;
+//        }
+//
+//        return min(gray, 0.8);
+//    }
+//
+//
+//    float4 colormap(float x) {
+//        float color = colormap_grayscale(x);
+//        return float4(color, color, color, 1.0);
+//    }
+//
+//
+//    float rand(float2 n) {
+//        return fract(sin(dot(n, float2(12.9898, 4.1414))) * 43758.5453);
+//    }
+//
+//    float noise(float2 p){
+//        float2 ip = floor(p);
+//        float2 u = fract(p);
+//        u = u*u*(3.0-2.0*u);
+//
+//        float res = mix(
+//            mix(rand(ip),rand(ip+float2(1.0,0.0)),u.x),
+//            mix(rand(ip+float2(0.0,1.0)),rand(ip+float2(1.0,1.0)),u.x),u.y);
+//        return res*res;
+//    }
+//
+//    const mat2 mtx = mat2( 0.80,  0.60, -0.60,  0.80 );
+//
+//    float fbm( float2 p )
+//    {
+//        float f = 0.0;
+//
+//        f += 0.500000*noise( p + time/2  ); p = mtx*p*2.02;
+//        f += 0.031250*noise( p ); p = mtx*p*2.01;
+//        f += 0.250000*noise( p ); p = mtx*p*2.03;
+//        f += 0.125000*noise( p ); p = mtx*p*2.01;
+//        f += 0.062500*noise( p ); p = mtx*p*2.04;
+//        f += 0.015625*noise( p + sin(time/2) );
+//
+//        return f/0.96875;
+//    }
+//
+//    float pattern( in float2 p )
+//    {
+//        return fbm( p + fbm( p + fbm( p ) ) );
+//    }
+//
+//    half4 main(float2 fragCoord)
+//    {
+//        float2 uv = fragCoord/size.y;
+//        float shade = pattern(uv);
+//        return half4(colormap(shade).rgb, shade);
+//    }
+//"""
 private const val SHADER_SRC = """
     uniform shader composable;
     uniform float time;
     uniform float2 size;
-    
-    float colormap_grayscale(float x) {
-        float gray;
+    float3 base_color = float3(0.1, 0.1, 0.1);
+    float3 bright_color = float3(0.8, 0.8, 0.8);
+
+    float2 hash22(float2 p)
+    {
+        p = float2( dot(p,float2(127.1,311.7)),
+                  dot(p,float2(269.5,183.3)));
+      
+        return -1.0 + 2.0 * fract(sin(p)*43758.5453123);
+    }
+
+
+    float perlin_noise(float2 p)
+    {
+        float2 pi = floor(p);
+        float2 pf = p-pi;
         
-        if (x < 0.0) {
-            gray = 104.0 / 255.0;
-        } else if (x < 20049.0 / 82979.0) {
-            gray = (829.79 * x + 1.51) / 255.0;
-        } else if (x < 327013.0 / 810990.0) {
-            gray = (82679670.0 / 10875673217.0 * x - 2190770.0 / 10875673217.0) / 255.0;
-        } else if (x < 1.0) {
-            gray = (103806720.0 / 483977.0 * x + 2607415.0 / 483977.0) / 255.0;
-        } else {
-            gray = 0.8;
-        }
+        float2 w = pf*pf*(3.-2.*pf);
         
-        return min(gray, 0.8);
+        float f00 = dot(hash22(pi+float2(.0,.0)),pf-float2(.0,.0));
+        float f01 = dot(hash22(pi+float2(.0,1.)),pf-float2(.0,1.));
+        float f10 = dot(hash22(pi+float2(1.0,0.)),pf-float2(1.0,0.));
+        float f11 = dot(hash22(pi+float2(1.0,1.)),pf-float2(1.0,1.));
+        
+        float xm1 = mix(f00,f10,w.x);
+        float xm2 = mix(f01,f11,w.x);
+        
+        return mix(xm1,xm2,w.y);
     }
 
-
-    float4 colormap(float x) {
-        float color = colormap_grayscale(x);
-        return float4(color, color, color, 1.0);
-    }
-
-
-    float rand(float2 n) { 
-        return fract(sin(dot(n, float2(12.9898, 4.1414))) * 43758.5453);
-    }
-
-    float noise(float2 p){
-        float2 ip = floor(p);
-        float2 u = fract(p);
-        u = u*u*(3.0-2.0*u);
-
-        float res = mix(
-            mix(rand(ip),rand(ip+float2(1.0,0.0)),u.x),
-            mix(rand(ip+float2(0.0,1.0)),rand(ip+float2(1.0,1.0)),u.x),u.y);
-        return res*res;
-    }
-
-    const mat2 mtx = mat2( 0.80,  0.60, -0.60,  0.80 );
-
-    float fbm( float2 p )
+    // Official HSV to RGB conversion 
+    float3 hsv2rgb( in float3 c )
     {
-        float f = 0.0;
+        float3 rgb = clamp( abs(mod(c.x*6.0+float3(0.0,4.0,2.0),6.0)-3.0)-1.0, 0.0, 1.0 );
 
-        f += 0.500000*noise( p + time/2  ); p = mtx*p*2.02;
-        f += 0.031250*noise( p ); p = mtx*p*2.01;
-        f += 0.250000*noise( p ); p = mtx*p*2.03;
-        f += 0.125000*noise( p ); p = mtx*p*2.01;
-        f += 0.062500*noise( p ); p = mtx*p*2.04;
-        f += 0.015625*noise( p + sin(time/2) );
-
-        return f/0.96875;
+        return c.z * mix( float3(1.0), rgb, c.y);
     }
 
-    float pattern( in float2 p )
+    half4 main(float2 fragCoord )
     {
-        return fbm( p + fbm( p + fbm( p ) ) );
-    }
+        // Normalized pixel coordinates (from 0 to 1)
+        float2 uv = fragCoord/size.xy;
+        float2 uv2 = uv + perlin_noise(4.8 * float2(uv.x + 38.913 + time * 0.01, uv.y + 81.975 + time * 0.01));
+        // Squash it vertically, so it looks OK in isometric
+        uv2 *= float2(1.0, 2.0);
+        uv2 = uv2 + float2(time * 0.05, 0.0);
 
-    half4 main(float2 fragCoord)
-    {
-        float2 uv = fragCoord/size.y;
-        float shade = pattern(uv);
-        if(composable.eval(fragCoord).a == 0){
-            shade = 0.0;
-        }
-        else{
-            shade = min(shade, 0.8);
-        }
-        return half4(colormap(shade).rgb, shade);
+        // Time varying pixel color
+        float f = perlin_noise(0.3 * uv2);
+
+        // Output to screen
+        f = (f + time * .01) * 8.0;
+        f = f - floor(f);
+        
+        float mix_amount = smoothstep(0.25, 0.27, f);
+        mix_amount = min(mix_amount, 1.0 - smoothstep(0.45, 0.60, f));
+        
+        float3 col2 = mix(base_color, bright_color, mix_amount);
+        return half4(col2, 1.0);
     }
 """
 //private const val SHADER_SRC = """
@@ -230,7 +301,7 @@ private const val SHADER_SRC = """
 //
 //            finalColor += col * d;
 //        }
-//        return half4(finalColor, composable.eval(fragCoord).a);
+//        return half4(finalColor, 1.0);
 //    }
 //"""
 
@@ -238,6 +309,7 @@ private const val SHADER_SRC = """
 @Composable
 fun ShaderTestScreen() {
     val shader = RuntimeShader(SHADER_SRC)
+    val shaderBrush = ShaderBrush(shader)
     val appleVectorSource =
         VectorSource.fromImageVector(ImageVector.vectorResource(R.drawable.applelogo))
     val firefoxVectorSource =
@@ -246,135 +318,79 @@ fun ShaderTestScreen() {
 
     val coroutineScope = rememberCoroutineScope()
     var timeMs by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(Unit) {
-        coroutineScope.launch {
-            while (true) {
-                timeMs = (System.currentTimeMillis() % 1000000L) / 1000f
-                delay(10)
-            }
-        }
-    }
+    var elapsedMs by remember { mutableFloatStateOf(0f) }
+    var startTime by remember { mutableFloatStateOf(System.currentTimeMillis().toFloat()) }
+//    LaunchedEffect(Unit) {
+//        coroutineScope.launch {
+//            while (true) {
+//                timeMs = (System.currentTimeMillis()).toFloat()
+//                elapsedMs = (timeMs - startTime).toFloat()
+//                if (elapsedMs > 10000) {
+//                    startTime = timeMs
+//                    elapsedMs = 0f
+//                }
+//                delay(10)
+//            }
+//        }
+//    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color.White)
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .wrapContentHeight()
-                .background(color = Color.DarkGray)
-                .padding(4.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            AnimatedFillVector(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1f)
-                    .onSizeChanged { size ->
-                        shader.setFloatUniform(
-                            "size",
-                            size.width.toFloat(),
-                            size.height.toFloat()
-                        )
-                    }
-                    .clickable {
-                        currSelectedSource = if (currSelectedSource == appleVectorSource) {
-                            firefoxVectorSource
-                        } else {
-                            appleVectorSource
-                        }
-                    }
-                    .graphicsLayer {
-                        shader.setFloatUniform("time", timeMs)
-                        clip = true
-                        renderEffect =
-                            RenderEffect
-                                .createChainEffect(
-                                    RenderEffect.createBlurEffect(
-                                        5.0f,
-                                        5.0f,
-                                        Shader.TileMode.CLAMP
-                                    ),
-                                    RenderEffect
-                                        .createRuntimeShaderEffect(shader, "composable"),
-                                )
-                                .asComposeRenderEffect()
-                    }
-                    .padding(50.dp),
-                vectorSource = currSelectedSource,
-                fillColor = Color.Black,
-                animationSpec = tween(durationMillis = 800, easing = EaseInOutExpo)
-            )
-//            VectorImage(
-//                modifier = Modifier
-//                    .padding(50.dp),
-//                source = VectorSource.fromImageVector(Icons.Default.Star),
-//                style = Stroke(width = 160f),
-//                color = Color.Black
-//            )
-//            VectorImage(
-//                modifier = Modifier
-//                    .onSizeChanged { size ->
-//                        shader.setFloatUniform(
-//                            "size",
-//                            size.width.toFloat(),
-//                            size.height.toFloat()
-//                        )
-//                    }
-//                    .alpha(1f)
-//                    .graphicsLayer {
-//                        shader.setFloatUniform("time", timeMs)
-//                        clip = true
-//                        renderEffect =
-//                            RenderEffect
-//                                .createChainEffect(
-//                                    RenderEffect.createBlurEffect(
-//                                        10.0f,
-//                                        10.0f,
-//                                        Shader.TileMode.CLAMP
-//                                    ),
-//                                    RenderEffect
-//                                        .createRuntimeShaderEffect(shader, "composable"),
-//                                )
-//                                .asComposeRenderEffect()
-//                    }
-//                    .padding(50.dp),
-//                source = VectorSource.fromImageVector(Icons.Default.Star),
-//                style = Stroke(width = 160f),
-//                color = Color.Black
-//            )
-//            VectorImage(
-//                modifier = Modifier
-//                    .onSizeChanged { size ->
-//                        shader.setFloatUniform(
-//                            "size",
-//                            size.width.toFloat(),
-//                            size.height.toFloat()
-//                        )
-//                    }
-//                    .alpha(0.6f)
-//                    .graphicsLayer {
-//                        shader.setFloatUniform("time", timeMs * 0.015123f)
-//                        clip = true
-//                        renderEffect =
-//                            RenderEffect
-//                                .createChainEffect(
-//                                    RenderEffect.createBlurEffect(
-//                                        50.0f,
-//                                        50.0f,
-//                                        Shader.TileMode.CLAMP
-//                                    ),
-//                                    RenderEffect
-//                                        .createRuntimeShaderEffect(shader, "composable"),
-//                                )
-//                                .asComposeRenderEffect()
-//                    }
-//                    .padding(50.dp),
-//                source = VectorSource.fromImageVector(Icons.Default.Star),
-//                style = Stroke(width = 160f),
-//                color = Color.Black
-//            )
+        CrazyButton(text = "Hello")
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+@Composable
+fun CrazyButton(modifier: Modifier = Modifier, text: String) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(100.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color.Black),
+        contentAlignment = Alignment.Center
+    ) {
+        CrazyButtonBackground(
+            modifier = Modifier.shadow(4.dp)
+        )
+        Text(color = Color.White, text = text, fontWeight = FontWeight.Black, fontSize = 24.sp)
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+@Composable
+fun CrazyButtonBackground(modifier: Modifier = Modifier) {
+    val shader = RuntimeShader(SHADER_SRC)
+    val shaderAnimator = ValueAnimator.ofFloat(0f, 40000f)
+    var animationValue by remember { mutableFloatStateOf(0f) }
+
+    LaunchedEffect(Unit) {
+        shaderAnimator.duration = 10000L
+        shaderAnimator.repeatCount = ValueAnimator.INFINITE
+        shaderAnimator.repeatMode = ValueAnimator.REVERSE
+        shaderAnimator.interpolator = AnticipateOvershootInterpolator()
+        shaderAnimator.addUpdateListener { animation ->
+            animationValue = animation.animatedValue as Float
         }
+        shaderAnimator.start()
+    }
+    Surface(modifier = modifier
+        .fillMaxSize()
+        .onSizeChanged {
+            shader.setFloatUniform("size", it.width.toFloat(), it.height.toFloat())
+        }
+        .graphicsLayer {
+            shader.setFloatUniform("time", animationValue / 1000f)
+            renderEffect = RenderEffect
+                .createChainEffect(
+                    RenderEffect.createBlurEffect(5f, 5f, Shader.TileMode.CLAMP),
+                    RenderEffect.createRuntimeShaderEffect(shader, "composable"),
+                )
+                .asComposeRenderEffect()
+        }
+    ) {
     }
 }
